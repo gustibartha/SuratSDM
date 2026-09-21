@@ -1,0 +1,62 @@
+# Letakkan file ini di ROOT project (sejajar dengan artisan, composer.json)
+services:
+  app:
+    build: ./docker/php
+    container_name: suratsdm_app
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      # vendor/ dan storage/framework dipindah ke named volume (filesystem native
+      # Linux di dalam Docker), bukan lewat bind mount Windows yang I/O-nya lambat
+      # untuk ribuan file kecil. Ini yang bikin tiap request kerasa berat.
+      - vendor_data:/var/www/html/vendor
+      - storage_framework:/var/www/html/storage/framework
+    ports:
+      - "8000:8000"
+    environment:
+      - COMPOSER_ALLOW_SUPERUSER=1
+    depends_on:
+      - db
+
+  db:
+    image: mysql:5.7
+    container_name: suratsdm_db
+    environment:
+      MYSQL_DATABASE: upmkrcom_suratsdm
+      MYSQL_USER: suratsdm
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"          # akses dari luar via localhost:3307 (hindari bentrok MySQL lokal)
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./docker/db/init:/docker-entrypoint-initdb.d   # file .sql di sini auto-import saat pertama kali
+
+  # Sementara, cuma untuk validasi kompatibilitas Laravel + Postgres sebelum
+  # pindah ke Supabase. Tidak dipakai oleh app secara default (app masih
+  # jalan di MySQL di atas) - lihat panduan deploy untuk cara pakainya.
+  pgtest:
+    image: postgres:15
+    container_name: suratsdm_pgtest
+    environment:
+      POSTGRES_DB: suratsdm_pgtest
+      POSTGRES_USER: suratsdm
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5433:5432"
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    container_name: suratsdm_pma
+    environment:
+      PMA_HOST: db
+      UPLOAD_LIMIT: 300M
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+
+volumes:
+  dbdata:
+  vendor_data:
+  storage_framework:
