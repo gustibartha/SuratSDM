@@ -15,6 +15,7 @@ class Cors
         'http://localhost:3000',
         'https://sdmupmkr.com',
         'https://www.sdmupmkr.com',
+        'https://suratsdm.vercel.app',
     ];
 
     public function handle($request, Closure $next)

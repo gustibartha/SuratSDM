@@ -9,9 +9,23 @@ use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function csrfCookie()
+    /**
+     * Frontend and backend live on different domains (e.g. vercel.app vs
+     * fly.dev) in production, so JS on the frontend's origin can never read
+     * the XSRF-TOKEN cookie the backend sets — cross-site cookies aren't
+     * visible via document.cookie on the other domain. Returning the same
+     * encrypted token in the response body lets the frontend send it back
+     * as X-XSRF-TOKEN without depending on cookie readability.
+     */
+    public function csrfCookie(Request $request)
     {
-        return response()->json(['message' => 'ok']);
+        return response()->json([
+            'message' => 'ok',
+            // false = don't serialize before encrypting: VerifyCsrfToken
+            // decrypts the X-XSRF-TOKEN header the same way (unserialized),
+            // matching how Laravel's own XSRF-TOKEN cookie is encrypted.
+            'csrf_token' => encrypt($request->session()->token(), false),
+        ]);
     }
 
     public function login(Request $request)

@@ -1,9 +1,8 @@
-# Laravel 5.5 butuh PHP 7.x. Kalau ada dependency yang rewel, ganti 7.4 -> 7.3 atau 7.2.
+# Production image for InsForge compute (Fly.io). Unlike docker/php/Dockerfile
+# (local dev: bind-mounts the repo, runs composer install at container start),
+# this bakes the app code and vendor/ into the image itself.
 FROM php:7.4-cli
 
-# Debian bullseye sudah EOL: deb.debian.org tidak lagi menyimpan paketnya (404).
-# archive.debian.org tidak punya suite "bullseye-security" terpisah, jadi buang baris
-# security & updates dan hanya pakai arsip "bullseye/main" (cukup untuk build image ini).
 RUN set -eux; \
     sed -i \
         -e 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' \
@@ -30,14 +29,23 @@ RUN set -eux; \
     docker-php-ext-install pdo_mysql pdo_pgsql mbstring gd zip bcmath exif opcache; \
     rm -rf /var/lib/apt/lists/*
 
-COPY opcache.ini /usr/local/etc/php/conf.d/opcache.ini
-COPY uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+COPY docker/php/opcache.prod.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
 WORKDIR /var/www/html
-EXPOSE 8000
-ENTRYPOINT ["entrypoint.sh"]
+
+# composer.json's autoload classmap points at database/seeds and
+# database/factories, so composer install needs the full tree present
+# (not just composer.json/lock) to generate the classmap successfully.
+COPY . .
+RUN composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader --no-scripts \
+    && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/testing storage/framework/views storage/logs bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
+
+COPY docker/php/entrypoint.prod.sh /usr/local/bin/entrypoint.prod.sh
+RUN chmod +x /usr/local/bin/entrypoint.prod.sh
+
+EXPOSE 8080
+ENTRYPOINT ["entrypoint.prod.sh"]

@@ -21,12 +21,22 @@ function readCookie(name: string): string | null {
 }
 
 /**
- * Laravel issues the XSRF-TOKEN cookie on any GET request. We hit this once
- * before login (and before any mutating request if we don't have it yet).
+ * Frontend and API live on different domains in production (vercel.app vs
+ * fly.dev), so document.cookie on the frontend's origin can never see the
+ * XSRF-TOKEN cookie the backend sets — it's a cross-site cookie, invisible
+ * to JS on the other domain. The backend also returns the same encrypted
+ * token in the response body (see AuthController::csrfCookie) specifically
+ * so we can cache it here instead of reading it back from the cookie.
  */
+let csrfToken: string | null = null;
+
 export async function ensureCsrfCookie(): Promise<void> {
-  if (readCookie("XSRF-TOKEN")) return;
-  await fetch(`${API_URL}/api/csrf-cookie`, { credentials: "include" });
+  if (csrfToken || readCookie("XSRF-TOKEN")) return;
+  const res = await fetch(`${API_URL}/api/csrf-cookie`, { credentials: "include" });
+  const body = await res.json().catch(() => null);
+  if (body?.csrf_token) {
+    csrfToken = body.csrf_token;
+  }
 }
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -44,7 +54,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     headers.set("Content-Type", "application/json");
   }
 
-  const xsrfToken = readCookie("XSRF-TOKEN");
+  const xsrfToken = csrfToken ?? readCookie("XSRF-TOKEN");
   if (xsrfToken && MUTATING_METHODS.has(method)) {
     headers.set("X-XSRF-TOKEN", xsrfToken);
   }
