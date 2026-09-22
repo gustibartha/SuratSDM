@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { Receipt } from "lucide-react";
+import { Eye, EyeOff, Receipt } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { homeRouteForRole } from "@/lib/types";
@@ -16,6 +16,7 @@ export default function LoginPage() {
   const { user, loading, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -84,14 +85,24 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             className="rounded border border-white/20 bg-white/10 px-4 py-2 text-sm placeholder-white/50 outline-none transition focus:border-cyan-400 focus:bg-white/15"
           />
-          <input
-            type="password"
-            required
-            placeholder="Silahkan Masukkan Password Anda"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded border border-white/20 bg-white/10 px-4 py-2 text-sm placeholder-white/50 outline-none transition focus:border-cyan-400 focus:bg-white/15"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              required
+              placeholder="Silahkan Masukkan Password Anda"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded border border-white/20 bg-white/10 px-4 py-2 pr-10 text-sm placeholder-white/50 outline-none transition focus:border-cyan-400 focus:bg-white/15"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 transition hover:text-white/90"
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
 
           {error && (
             <motion.p

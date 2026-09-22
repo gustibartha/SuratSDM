@@ -11,8 +11,9 @@
 # npm-debug.log
 # yarn-error.log
 .env
-   /docker/db/init/
-   *.sql
+/docker/db/init/
+*.sql
+!/migrations/*.sql
 # InsForge & AI agent skills
 .insforge
 .agent
