@@ -3,9 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\ResetPasswordMail;
+use App\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -89,5 +95,61 @@ class AuthController extends Controller
         $user->save();
 
         return response()->json(['message' => 'Berhasil mengubah password.']);
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        $data = $request->validate(['email' => 'required|email']);
+
+        $user = User::where('email', $data['email'])->first();
+
+        // Same response whether or not the email exists, so this endpoint
+        // can't be used to check which addresses have an account.
+        if ($user) {
+            $token = Str::random(64);
+
+            DB::table('password_resets')->where('email', $user->email)->delete();
+            DB::table('password_resets')->insert([
+                'email' => $user->email,
+                'token' => Hash::make($token),
+                'created_at' => now(),
+            ]);
+
+            $resetUrl = rtrim(config('app.frontend_url'), '/')
+                . '/reset-password?token=' . $token . '&email=' . urlencode($user->email);
+
+            Mail::to($user->email)->send(new ResetPasswordMail($user, $resetUrl));
+        }
+
+        return response()->json(['message' => 'Jika email terdaftar, link reset password sudah dikirim.']);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $data = $request->validate([
+            'email' => 'required|email',
+            'token' => 'required|string',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $record = DB::table('password_resets')->where('email', $data['email'])->first();
+
+        if (! $record || ! Hash::check($data['token'], $record->token)) {
+            return response()->json(['message' => 'Link reset password tidak valid.'], 422);
+        }
+
+        if (Carbon::parse($record->created_at)->addMinutes(60)->isPast()) {
+            DB::table('password_resets')->where('email', $data['email'])->delete();
+
+            return response()->json(['message' => 'Link reset password sudah kedaluwarsa. Silakan minta link baru.'], 422);
+        }
+
+        $user = User::where('email', $data['email'])->first();
+        $user->password = bcrypt($data['password']);
+        $user->save();
+
+        DB::table('password_resets')->where('email', $data['email'])->delete();
+
+        return response()->json(['message' => 'Password berhasil diubah. Silakan login.']);
     }
 }

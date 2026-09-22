@@ -104,6 +104,10 @@ export default function LoginPage() {
             </button>
           </div>
 
+          <Link href="/forgot-password" className="text-right text-xs text-white/60 transition hover:text-white">
+            Lupa Password?
+          </Link>
+
           {error && (
             <motion.p
               initial={{ opacity: 0, height: 0 }}

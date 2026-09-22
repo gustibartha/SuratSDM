@@ -80,6 +80,8 @@ Route::prefix('api')->group(function () {
     Route::post('logout', 'Api\AuthController@logout');
     Route::get('user', 'Api\AuthController@user');
     Route::post('change-password', 'Api\AuthController@changePassword');
+    Route::post('forgot-password', 'Api\AuthController@forgotPassword');
+    Route::post('reset-password', 'Api\AuthController@resetPassword');
 
     Route::get('dashboard', 'Api\DashboardController@index');
 

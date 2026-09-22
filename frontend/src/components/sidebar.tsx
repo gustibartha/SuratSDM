@@ -35,6 +35,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/visa", label: "Visa", icon: Plane },
   { href: "/history-record", label: "History Record", icon: Stethoscope },
   { href: "/export", label: "Export", icon: Download },
+  { href: "/ubah-password", label: "Ubah Password", icon: KeyRound },
 ];
 
 const APPROVER_NAV_ITEMS = [
