@@ -39,6 +39,30 @@ function formatRupiah(value: number | null) {
   );
 }
 
+function formatTanggalGroup(value: string | null) {
+  if (!value) return "Tanggal Tidak Diketahui";
+  return new Date(value).toLocaleDateString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function groupByTanggal(items: Kuitansi[]) {
+  const groups: { tanggal: string; items: Kuitansi[] }[] = [];
+  for (const item of items) {
+    const key = formatTanggalGroup(item.tanggal_kuitansi);
+    const existing = groups.find((g) => g.tanggal === key);
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      groups.push({ tanggal: key, items: [item] });
+    }
+  }
+  return groups;
+}
+
 export default function KuitansiListPage() {
   const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>("Semua");
   const [page, setPage] = useState(1);
@@ -135,48 +159,62 @@ export default function KuitansiListPage() {
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {result?.data.map((k, i) => (
-          <motion.div
-            key={k.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: i * 0.03 }}
-          >
-            <Link
-              href={`/kuitansi/${k.id}`}
-              className="flex gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-black/5 transition hover:shadow-md"
-            >
-              {k.foto_path ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={`${API_URL}/kuitansi-foto/${k.foto_path}`}
-                  alt="Kuitansi"
-                  className="h-20 w-20 shrink-0 rounded-lg object-cover"
-                />
-              ) : (
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-400">
-                  <Receipt size={24} />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-zinc-800">{k.nama_pasien}</p>
-                <p className="truncate text-xs text-zinc-500">{k.rumah_sakit?.nama_rumah_sakit}</p>
-                <p className="mt-1 text-sm font-medium text-zinc-700">{formatRupiah(k.nominal)}</p>
-                <span
-                  className={`mt-1 inline-block rounded px-2 py-0.5 text-xs font-medium ${statusColor(k.status)}`}
-                >
-                  {k.status}
-                </span>
+      {result && result.data.length === 0 && (
+        <p className="py-10 text-center text-sm text-zinc-400">Belum ada kuitansi untuk status ini.</p>
+      )}
+
+      <div className="flex flex-col gap-6">
+        {result &&
+          groupByTanggal(result.data).map((group, groupIndex) => (
+            <div key={group.tanggal} className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="h-px flex-1 bg-zinc-200" />
+                <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  {group.tanggal}
+                </h2>
+                <span className="h-px flex-1 bg-zinc-200" />
               </div>
-            </Link>
-          </motion.div>
-        ))}
-        {result && result.data.length === 0 && (
-          <p className="col-span-full py-10 text-center text-sm text-zinc-400">
-            Belum ada kuitansi untuk status ini.
-          </p>
-        )}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {group.items.map((k, i) => (
+                  <motion.div
+                    key={k.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: (groupIndex * 3 + i) * 0.02 }}
+                  >
+                    <Link
+                      href={`/kuitansi/${k.id}`}
+                      className="flex gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-black/5 transition hover:shadow-md"
+                    >
+                      {k.foto_path ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`${API_URL}/kuitansi-foto/${k.foto_path}`}
+                          alt="Kuitansi"
+                          className="h-20 w-20 shrink-0 rounded-lg object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-400">
+                          <Receipt size={24} />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-zinc-800">{k.nama_pasien}</p>
+                        <p className="truncate text-xs text-zinc-500">{k.rumah_sakit?.nama_rumah_sakit}</p>
+                        <p className="mt-1 text-sm font-medium text-zinc-700">{formatRupiah(k.nominal)}</p>
+                        <span
+                          className={`mt-1 inline-block rounded px-2 py-0.5 text-xs font-medium ${statusColor(k.status)}`}
+                        >
+                          {k.status}
+                        </span>
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          ))}
       </div>
 
       {result && result.last_page > 1 && (

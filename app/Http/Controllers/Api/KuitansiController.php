@@ -112,7 +112,9 @@ class KuitansiController extends ApiController
             $query->where('status', $request->query('status'));
         }
 
-        return response()->json($query->latest()->paginate(25));
+        return response()->json(
+            $query->orderByDesc('tanggal_kuitansi')->orderByDesc('id')->paginate(25)
+        );
     }
 
     public function show($id)

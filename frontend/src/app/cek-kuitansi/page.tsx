@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Receipt, Search, ArrowLeft, User, Briefcase, Wallet } from "lucide-react";
+import { Receipt, Search, ArrowLeft, User } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -51,8 +51,9 @@ function formatRupiah(value: number | null) {
   );
 }
 
+const STATUS_KARYAWAN = "pensiunan";
+
 export default function CekKuitansiPage() {
-  const [statusKaryawan, setStatusKaryawan] = useState<"karyawan_tetap" | "pensiunan">("karyawan_tetap");
   const [mode, setMode] = useState<"nid" | "nama">("nid");
   const [nid, setNid] = useState("");
   const [nama, setNama] = useState("");
@@ -73,7 +74,7 @@ export default function CekKuitansiPage() {
       setSearchingName(true);
       try {
         const res = await apiFetch<{ data: NameMatch[] }>(
-          `/api/public/kuitansi-search?nama=${encodeURIComponent(nama.trim())}&status_karyawan=${statusKaryawan}`
+          `/api/public/kuitansi-search?nama=${encodeURIComponent(nama.trim())}&status_karyawan=${STATUS_KARYAWAN}`
         );
         setMatches(res.data);
       } catch {
@@ -85,7 +86,7 @@ export default function CekKuitansiPage() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [nama, mode, statusKaryawan]);
+  }, [nama, mode]);
 
   async function fetchStatus(params: string) {
     setError(null);
@@ -93,7 +94,7 @@ export default function CekKuitansiPage() {
     setLoading(true);
     try {
       const res = await apiFetch<PublicStatusResponse>(
-        `/api/public/kuitansi-status?${params}&status_karyawan=${statusKaryawan}`
+        `/api/public/kuitansi-status?${params}&status_karyawan=${STATUS_KARYAWAN}`
       );
       setResult(res);
       setMatches([]);
@@ -150,32 +151,7 @@ export default function CekKuitansiPage() {
               <Receipt size={20} className="text-cyan-400" />
               Cek Status Kuitansi
             </h1>
-          </div>
-
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            {(
-              [
-                { value: "karyawan_tetap", label: "Karyawan", icon: Briefcase },
-                { value: "pensiunan", label: "Pensiunan", icon: Wallet },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  setStatusKaryawan(opt.value);
-                  resetSearch();
-                }}
-                className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition ${
-                  statusKaryawan === opt.value
-                    ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/20"
-                    : "bg-white/10 text-white/70 hover:bg-white/20"
-                }`}
-              >
-                <opt.icon size={16} />
-                {opt.label}
-              </button>
-            ))}
+            <p className="mt-1 text-xs text-white/50">Khusus Pensiunan</p>
           </div>
 
           <div className="mb-4 flex justify-center gap-2 text-sm">
