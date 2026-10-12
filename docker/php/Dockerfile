@@ -20,10 +20,11 @@ RUN set -eux; \
     # bullseye's own libpq-dev (13.16) hits "SSL connection has been closed
     # unexpectedly" against Postgres providers that front the DB with a
     # modern connection proxy (a known libpq <14 handshake bug) — pull a
-    # current libpq from PGDG instead of the archived Debian one.
+    # current libpq from PGDG instead of the archived Debian one. PGDG moved
+    # bullseye off apt.postgresql.org to its archive host once it went EOL.
     install -d /usr/share/postgresql-common/pgdg; \
     curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc; \
-    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bullseye-pgdg main" > /etc/apt/sources.list.d/pgdg.list; \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt-archive.postgresql.org/pub/repos/apt bullseye-pgdg main" > /etc/apt/sources.list.d/pgdg.list; \
     apt-get -o Acquire::Retries=5 update; \
     apt-get -o Acquire::Retries=5 install -y --no-install-recommends libpq-dev; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
