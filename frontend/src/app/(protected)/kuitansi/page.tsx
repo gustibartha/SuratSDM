@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { Plus, Receipt, RefreshCw } from "lucide-react";
+import { Plus, Receipt, RefreshCw, Search, X } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { Kuitansi, PaginatedResponse } from "@/lib/types";
 
@@ -65,6 +65,8 @@ function groupByTanggal(items: Kuitansi[]) {
 
 export default function KuitansiListPage() {
   const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>("Semua");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<PaginatedResponse<Kuitansi> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,15 +75,24 @@ export default function KuitansiListPage() {
 
   const load = useCallback(() => {
     setError(null);
-    const query = status === "Semua" ? "" : `&status=${encodeURIComponent(status)}`;
+    let query = status === "Semua" ? "" : `&status=${encodeURIComponent(status)}`;
+    if (search) query += `&q=${encodeURIComponent(search)}`;
     apiFetch<PaginatedResponse<Kuitansi>>(`/api/kuitansi?page=${page}${query}`)
       .then(setResult)
       .catch(() => setError("Gagal memuat data kuitansi."));
-  }, [page, status]);
+  }, [page, status, search]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   async function handleSync() {
     setSyncing(true);
@@ -140,6 +151,27 @@ export default function KuitansiListPage() {
         </motion.div>
       )}
 
+      <div className="relative max-w-md">
+        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Cari nama karyawan/pensiunan, pasien, NID, atau rumah sakit..."
+          className="w-full rounded-lg bg-white py-2 pl-9 pr-9 text-sm shadow-sm ring-1 ring-black/5 outline-none focus:ring-cyan-500"
+        />
+        {searchInput && (
+          <button
+            type="button"
+            onClick={() => setSearchInput("")}
+            aria-label="Hapus pencarian"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
       <div className="flex flex-wrap gap-2 text-sm">
         {STATUS_FILTERS.map((s) => (
           <button
@@ -160,7 +192,9 @@ export default function KuitansiListPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {result && result.data.length === 0 && (
-        <p className="py-10 text-center text-sm text-zinc-400">Belum ada kuitansi untuk status ini.</p>
+        <p className="py-10 text-center text-sm text-zinc-400">
+          {search ? `Tidak ada kuitansi yang cocok dengan "${search}".` : "Belum ada kuitansi untuk status ini."}
+        </p>
       )}
 
       <div className="flex flex-col gap-6">
@@ -201,6 +235,9 @@ export default function KuitansiListPage() {
                       )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-zinc-800">{k.nama_pasien}</p>
+                        {k.karyawan && k.karyawan.nama_karyawan !== k.nama_pasien && (
+                          <p className="truncate text-xs text-zinc-500">a.n. {k.karyawan.nama_karyawan}</p>
+                        )}
                         <p className="truncate text-xs text-zinc-500">{k.rumah_sakit?.nama_rumah_sakit}</p>
                         <p className="mt-1 text-sm font-medium text-zinc-700">{formatRupiah(k.nominal)}</p>
                         <span

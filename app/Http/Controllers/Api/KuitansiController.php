@@ -112,6 +112,20 @@ class KuitansiController extends ApiController
             $query->where('status', $request->query('status'));
         }
 
+        if ($request->filled('q')) {
+            $term = '%' . strtolower(trim($request->query('q'))) . '%';
+            $query->where(function ($w) use ($term) {
+                $w->whereRaw('LOWER(nama_pasien) LIKE ?', [$term])
+                    ->orWhereHas('karyawan', function ($k) use ($term) {
+                        $k->whereRaw('LOWER(nama_karyawan) LIKE ?', [$term])
+                            ->orWhereRaw('LOWER(nid) LIKE ?', [$term]);
+                    })
+                    ->orWhereHas('rumahSakit', function ($r) use ($term) {
+                        $r->whereRaw('LOWER(nama_rumah_sakit) LIKE ?', [$term]);
+                    });
+            });
+        }
+
         return response()->json(
             $query->orderByDesc('tanggal_kuitansi')->orderByDesc('id')->paginate(25)
         );
