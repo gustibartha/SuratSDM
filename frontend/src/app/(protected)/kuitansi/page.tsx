@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { Plus, Receipt, RefreshCw, Search, X } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { Kuitansi, PaginatedResponse } from "@/lib/types";
+import UnmatchedNamesPanel, { type UnmatchedName } from "@/components/unmatched-names-panel";
 
 interface SyncSummary {
   imported: number;
@@ -13,6 +14,7 @@ interface SyncSummary {
   unchanged: number;
   skipped: number;
   skipped_reasons: string[];
+  unmatched: UnmatchedName[];
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -74,11 +76,13 @@ export default function KuitansiListPage() {
   const [syncSummary, setSyncSummary] = useState<SyncSummary | null>(null);
 
   const load = useCallback(() => {
-    setError(null);
     let query = status === "Semua" ? "" : `&status=${encodeURIComponent(status)}`;
     if (search) query += `&q=${encodeURIComponent(search)}`;
     apiFetch<PaginatedResponse<Kuitansi>>(`/api/kuitansi?page=${page}${query}`)
-      .then(setResult)
+      .then((res) => {
+        setError(null);
+        setResult(res);
+      })
       .catch(() => setError("Gagal memuat data kuitansi."));
   }, [page, status, search]);
 
@@ -149,6 +153,15 @@ export default function KuitansiListPage() {
           <strong>{syncSummary.updated}</strong> diperbarui, {syncSummary.unchanged} tidak berubah,{" "}
           {syncSummary.skipped} dilewati (tidak ketemu data karyawan/tanggal tidak valid).
         </motion.div>
+      )}
+
+      {syncSummary && syncSummary.unmatched.length > 0 && (
+        <UnmatchedNamesPanel
+          key={syncSummary.unmatched.map((u) => `${u.status_karyawan}|${u.name}`).join(",")}
+          items={syncSummary.unmatched}
+          onResync={handleSync}
+          resyncing={syncing}
+        />
       )}
 
       <div className="relative max-w-md">

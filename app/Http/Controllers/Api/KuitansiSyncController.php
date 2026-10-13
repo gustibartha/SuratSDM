@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Karyawan;
 use App\Models\Kuitansi;
+use App\Models\KuitansiNameAlias;
 use App\Models\RumahSakit;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -51,15 +52,35 @@ class KuitansiSyncController extends ApiController
             }
         }
 
-        $karyawanByNid = Karyawan::whereNotNull('nid')->get(['id', 'nid', 'status_karyawan'])
-            ->keyBy(function ($k) {
-                return $k->status_karyawan . '|' . $k->nid;
+        $karyawanAll = Karyawan::get(['id', 'nid', 'nama_karyawan', 'status_karyawan']);
+
+        $karyawanByNid = $karyawanAll->filter(function ($k) {
+            return $k->nid;
+        })->keyBy(function ($k) {
+            return $k->status_karyawan . '|' . $k->nid;
+        });
+
+        // Names in the sheet are typed by hand ("M KAMAL" vs "M. KAMAL",
+        // "ALM.CHORIB", "MURTI TUSLI" vs "MURTITUSLI"), so match on a key
+        // that ignores titles, punctuation and spacing. A key shared by two
+        // different people is dropped rather than guessed between.
+        $karyawanByName = $karyawanAll->filter(function ($k) {
+            return self::matchKey((string) $k->nama_karyawan) !== '';
+        })->groupBy(function ($k) {
+            return $k->status_karyawan . '|' . self::matchKey((string) $k->nama_karyawan);
+        })->filter(function ($group) {
+            return $group->count() === 1;
+        })->map(function ($group) {
+            return $group->first();
+        });
+
+        $karyawanById = $karyawanAll->keyBy('id');
+        $aliasTarget = KuitansiNameAlias::get(['status_karyawan', 'alias_key', 'karyawan_id'])
+            ->mapWithKeys(function ($a) {
+                return [$a->status_karyawan . '|' . $a->alias_key => $a->karyawan_id];
             });
 
-        $karyawanByName = Karyawan::get(['id', 'nama_karyawan', 'status_karyawan'])
-            ->keyBy(function ($k) {
-                return $k->status_karyawan . '|' . strtoupper(trim($k->nama_karyawan));
-            });
+        $unmatched = [];
 
         $rumahSakitByName = RumahSakit::get(['id', 'nama_rumah_sakit'])
             ->keyBy(function ($r) {
@@ -112,13 +133,31 @@ class KuitansiSyncController extends ApiController
                 continue;
             }
 
-            $karyawan = $statusKaryawan === 'karyawan_tetap'
-                ? ($karyawanByNid[$statusKaryawan . '|' . trim($row['NID'] ?? '')] ?? null)
-                : ($karyawanByName[$statusKaryawan . '|' . strtoupper($this->stripTitle($namaKaryawanRaw))] ?? null);
+            $matchKey = self::matchKey($namaKaryawanRaw);
+            $nameKey = $statusKaryawan . '|' . $matchKey;
+            $nid = trim($row['NID'] ?? '');
+
+            $karyawan = $nid !== '' ? ($karyawanByNid[$statusKaryawan . '|' . $nid] ?? null) : null;
+
+            if (! $karyawan && $matchKey !== '') {
+                $karyawan = $karyawanByName[$nameKey] ?? null;
+            }
+
+            if (! $karyawan && $matchKey !== '' && isset($aliasTarget[$nameKey])) {
+                $karyawan = $karyawanById[$aliasTarget[$nameKey]] ?? null;
+            }
 
             if (! $karyawan) {
                 $summary['skipped']++;
-                $summary['skipped_reasons'][] = "Tidak ketemu karyawan: {$namaKaryawanRaw}";
+                if (! isset($unmatched[$nameKey])) {
+                    $unmatched[$nameKey] = [
+                        'name' => $this->stripTitle($namaKaryawanRaw),
+                        'status_karyawan' => $statusKaryawan,
+                        'nid' => $nid !== '' ? $nid : null,
+                        'rows' => 0,
+                    ];
+                }
+                $unmatched[$nameKey]['rows']++;
                 continue;
             }
 
@@ -177,8 +216,59 @@ class KuitansiSyncController extends ApiController
         }
         $summary['imported'] = count($toInsert);
         $summary['skipped_reasons'] = array_slice(array_unique($summary['skipped_reasons']), 0, 30);
+        $summary['unmatched'] = $this->withSuggestions(array_values($unmatched), $karyawanAll);
 
         return response()->json($summary);
+    }
+
+    /**
+     * Ranks the closest karyawan of the same status for each unmatched sheet
+     * name. These are only suggestions: an admin confirms each one, since
+     * near-identical names ("SUMARTO" / "SUHARTO") can be different people.
+     */
+    private function withSuggestions(array $unmatched, $karyawanAll): array
+    {
+        $byStatus = $karyawanAll->groupBy('status_karyawan');
+
+        foreach ($unmatched as &$item) {
+            $needle = self::matchKey($item['name']);
+            $item['suggestions'] = ($byStatus[$item['status_karyawan']] ?? collect())
+                ->map(function ($k) use ($needle) {
+                    return [
+                        'id' => $k->id,
+                        'nama_karyawan' => $k->nama_karyawan,
+                        'nid' => $k->nid,
+                        'distance' => levenshtein($needle, self::matchKey((string) $k->nama_karyawan)),
+                    ];
+                })
+                ->sortBy('distance')
+                ->take(3)
+                ->values()
+                ->all();
+        }
+        unset($item);
+
+        usort($unmatched, function ($a, $b) {
+            return $b['rows'] <=> $a['rows'];
+        });
+
+        return $unmatched;
+    }
+
+    /**
+     * Key for matching a hand-typed sheet name to a karyawan record: leading
+     * titles removed, then everything but letters dropped, so spacing and
+     * punctuation differences don't matter.
+     */
+    public static function matchKey(string $name): string
+    {
+        $name = strtoupper(trim($name));
+        do {
+            $before = $name;
+            $name = preg_replace('/^(NY|TN|SDR|SDRI|ALM|ALMH|ALMARHUM|ALMARHUMAH|IR|DRS|DRA|DR|HJ|H)\b\.?\s*/', '', $name);
+        } while ($name !== $before);
+
+        return preg_replace('/[^A-Z]/', '', $name);
     }
 
     /**

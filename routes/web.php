@@ -146,6 +146,9 @@ Route::prefix('api')->group(function () {
     Route::post('kuitansi/{id}/status', 'Api\KuitansiController@updateStatus');
     Route::delete('kuitansi/{id}', 'Api\KuitansiController@destroy');
     Route::post('kuitansi-sync', 'Api\KuitansiSyncController@sync');
+    Route::get('kuitansi-aliases', 'Api\KuitansiNameAliasController@index');
+    Route::post('kuitansi-aliases', 'Api\KuitansiNameAliasController@store');
+    Route::delete('kuitansi-aliases/{id}', 'Api\KuitansiNameAliasController@destroy');
 });
 
 Route::middleware(['dokter'])->group(function () {
