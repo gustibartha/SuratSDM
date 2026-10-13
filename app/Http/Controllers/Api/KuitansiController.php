@@ -45,6 +45,19 @@ class KuitansiController extends ApiController
         ]);
     }
 
+    /**
+     * Receipt date newest first, undated last. Sorting on created_at doesn't
+     * work: one sync inserts thousands of rows with the same timestamp. The
+     * explicit IS NULL term is needed because Postgres puts NULLs first in
+     * a DESC sort (MySQL puts them last).
+     */
+    public static function newestFirst($query)
+    {
+        return $query->orderByRaw('tanggal_kuitansi IS NULL')
+            ->orderByDesc('tanggal_kuitansi')
+            ->orderByDesc('id');
+    }
+
     private static function maskNid(?string $nid): string
     {
         if (! $nid || strlen($nid) <= 4) {
@@ -85,9 +98,9 @@ class KuitansiController extends ApiController
             return response()->json(['message' => "NID tidak ditemukan pada data {$label}."], 404);
         }
 
-        $kuitansi = Kuitansi::with('rumahSakit')
-            ->where('karyawan_id', $karyawan->id)
-            ->latest()
+        $kuitansi = self::newestFirst(
+            Kuitansi::with('rumahSakit')->where('karyawan_id', $karyawan->id)
+        )
             ->get([
                 'id', 'nama_pasien', 'hubungan_keluarga', 'id_rumah_sakit',
                 'nominal', 'tanggal_kuitansi', 'status', 'catatan', 'created_at',
@@ -127,7 +140,7 @@ class KuitansiController extends ApiController
         }
 
         return response()->json(
-            $query->orderByDesc('tanggal_kuitansi')->orderByDesc('id')->paginate(25)
+            self::newestFirst($query)->paginate(25)
         );
     }
 

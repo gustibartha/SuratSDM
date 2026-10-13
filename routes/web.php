@@ -74,6 +74,8 @@ Route::prefix('api')->group(function () {
     // Publik, tanpa login - dipanggil dari halaman /cek-kuitansi.
     Route::get('public/kuitansi-status', 'Api\KuitansiController@publicStatus');
     Route::get('public/kuitansi-search', 'Api\KuitansiController@publicSearchByName');
+    // Dibaca Google Sheet lewat =IMPORTDATA(), dilindungi SHEET_MASTER_KEY.
+    Route::get('sheet-master', 'Api\SheetMasterController@show');
 
     Route::get('csrf-cookie', 'Api\AuthController@csrfCookie');
     Route::post('login', 'Api\AuthController@login');

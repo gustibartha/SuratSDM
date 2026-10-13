@@ -39,4 +39,8 @@ return [
         'key' => env('ANTHROPIC_API_KEY'),
     ],
 
+    'sheet_master' => [
+        'key' => env('SHEET_MASTER_KEY'),
+    ],
+
 ];
