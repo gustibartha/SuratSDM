@@ -7,7 +7,9 @@
  *   1. Di spreadsheet: Extensions > Apps Script, hapus isi Code.gs, tempel
  *      seluruh file ini, lalu isi SHEET_MASTER_KEY di bawah.
  *   2. Pilih fungsi "setup" di toolbar, klik Run, lalu izinkan aksesnya.
- *   Selesai. Fungsi onEdit berjalan otomatis setiap ada yang mengetik.
+ *   Selesai. Fungsi onEdit berjalan otomatis setiap ada yang mengetik, dan
+ *   daftar nama diperbarui otomatis tiap jam (fungsi refreshMaster).
+ *   Kalau ada karyawan baru dan ingin langsung muncul, jalankan refreshMaster.
  */
 
 const API_URL = 'https://suratsdm-api-3aee8fd4-19b1-4fa5-9a2f-66e65ed7df35.fly.dev/api/sheet-master';
@@ -34,16 +36,16 @@ const STRICT_PASIEN = false;
 function setup() {
   const ss = SpreadsheetApp.getActive();
 
-  Object.keys(MASTER_TABS).forEach(function (status) {
-    const name = MASTER_TABS[status];
-    const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
-    sheet.clear();
-    sheet.getRange('A1').setFormula(
-      '=IMPORTDATA("' + API_URL + '?status=' + status + '&key=' + SHEET_MASTER_KEY + '")'
-    );
-    sheet.hideSheet();
-  });
-  SpreadsheetApp.flush();
+  // Daftar diambil oleh script sendiri (bukan =IMPORTDATA), karena Sheets
+  // memblokir IMPORTDATA sampai ada yang klik "Allow access" — dan tombol
+  // itu tidak pernah muncul di tab yang disembunyikan.
+  refreshMaster();
+
+  // Perbarui daftar otomatis tiap jam.
+  ScriptApp.getProjectTriggers()
+    .filter(function (t) { return t.getHandlerFunction() === 'refreshMaster'; })
+    .forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('refreshMaster').timeBased().everyHours(1).create();
 
   Object.keys(INPUT_TABS).forEach(function (tabName) {
     const sheet = ss.getSheetByName(tabName);
@@ -66,6 +68,25 @@ function setup() {
   });
 
   SpreadsheetApp.getUi().alert('Dropdown sudah dipasang.');
+}
+
+function refreshMaster() {
+  const ss = SpreadsheetApp.getActive();
+  Object.keys(MASTER_TABS).forEach(function (status) {
+    const url = API_URL + '?status=' + status + '&key=' + encodeURIComponent(SHEET_MASTER_KEY);
+    const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) {
+      throw new Error('Gagal mengambil daftar ' + status + ' (HTTP ' + res.getResponseCode() + '). Cek SHEET_MASTER_KEY.');
+    }
+    const rows = Utilities.parseCsv(res.getContentText('UTF-8'));
+    if (rows.length < 2) return; // jangan kosongkan daftar kalau respons kosong
+
+    const name = MASTER_TABS[status];
+    const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+    sheet.clearContents();
+    sheet.getRange(1, 1, rows.length, rows[0].length).setNumberFormat('@').setValues(rows);
+    if (!sheet.isSheetHidden()) sheet.hideSheet();
+  });
 }
 
 function onEdit(e) {
