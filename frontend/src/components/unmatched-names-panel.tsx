@@ -12,20 +12,27 @@ export interface UnmatchedName {
   status_karyawan: StatusKaryawan;
   nid: string | null;
   rows: number;
-  suggestions: { id: number; nama_karyawan: string; nid: string | null; distance: number }[];
+  suggestions: {
+    id: number;
+    nama_karyawan: string;
+    nid: string | null;
+    status_karyawan: StatusKaryawan;
+    distance: number;
+  }[];
 }
 
 interface KaryawanOpt {
   id: number;
   nama_karyawan: string;
   nid: string | null;
+  status_karyawan: StatusKaryawan;
 }
 
 interface Alias {
   id: number;
   alias_name: string;
   status_karyawan: StatusKaryawan;
-  karyawan: { id: number; nama_karyawan: string; nid: string | null } | null;
+  karyawan: { id: number; nama_karyawan: string; nid: string | null; status_karyawan: StatusKaryawan } | null;
 }
 
 const rowKey = (u: UnmatchedName) => `${u.status_karyawan}|${u.name}`;
@@ -74,13 +81,15 @@ export default function UnmatchedNamesPanel({
 
   async function link(u: UnmatchedName) {
     const id = choice[rowKey(u)];
-    const target = options[u.status_karyawan].find((o) => o.id === id) ?? u.suggestions.find((s) => s.id === id);
+    const target = allOptions.find((o) => o.id === id) ?? u.suggestions.find((s) => s.id === id);
     if (!id || !target) return;
 
     const ok = window.confirm(
-      `Hubungkan nama "${u.name}" di spreadsheet dengan ${target.nama_karyawan}${
-        target.nid ? ` (NID ${target.nid})` : ""
-      }?\n\nSemua ${u.rows} kuitansi atas nama ini akan masuk ke riwayat orang tersebut. Pastikan ini orang yang sama.`
+      `Hubungkan nama "${u.name}" di spreadsheet dengan ${target.nama_karyawan} (${
+        STATUS_LABEL[target.status_karyawan]
+      }${target.nid ? `, NID ${target.nid}` : ""})?\n\nSemua ${
+        u.rows
+      } kuitansi atas nama ini akan masuk ke riwayat orang tersebut. Pastikan ini orang yang sama.`
     );
     if (!ok) return;
 
@@ -112,21 +121,26 @@ export default function UnmatchedNamesPanel({
     }
   }
 
+  const allOptions = useMemo(() => [...options.pensiunan, ...options.karyawan_tetap], [options]);
+
   const selectOptions = useMemo(() => {
+    const describe = (status: StatusKaryawan, nid: string | null) =>
+      `${STATUS_LABEL[status]}${nid ? ` · NID ${nid}` : ""}`;
     const build = (u: UnmatchedName) => {
       const suggestedIds = new Set(u.suggestions.map((s) => s.id));
       const suggested = u.suggestions.map((s) => ({
         value: s.id,
         label: s.nama_karyawan,
-        sublabel: `Saran${s.nid ? ` · NID ${s.nid}` : ""}`,
+        sublabel: `Saran · ${describe(s.status_karyawan, s.nid)}`,
       }));
-      const rest = options[u.status_karyawan]
+      // Same-category people first, then the other category.
+      const rest = [...options[u.status_karyawan], ...allOptions.filter((o) => o.status_karyawan !== u.status_karyawan)]
         .filter((o) => !suggestedIds.has(o.id))
-        .map((o) => ({ value: o.id, label: o.nama_karyawan, sublabel: o.nid ? `NID ${o.nid}` : undefined }));
+        .map((o) => ({ value: o.id, label: o.nama_karyawan, sublabel: describe(o.status_karyawan, o.nid) }));
       return [...suggested, ...rest];
     };
     return Object.fromEntries(items.map((u) => [rowKey(u), build(u)]));
-  }, [items, options]);
+  }, [items, options, allOptions]);
 
   const totalRows = items.reduce((sum, u) => sum + u.rows, 0);
 
@@ -199,8 +213,12 @@ export default function UnmatchedNamesPanel({
             {aliases.map((a) => (
               <li key={a.id} className="flex items-center justify-between gap-2 px-3 py-2">
                 <span className="min-w-0 truncate">
-                  <span className="font-medium">{a.alias_name}</span> → {a.karyawan?.nama_karyawan ?? "?"}{" "}
-                  <span className="text-zinc-400">({STATUS_LABEL[a.status_karyawan]})</span>
+                  <span className="font-medium">{a.alias_name}</span>{" "}
+                  <span className="text-zinc-400">({STATUS_LABEL[a.status_karyawan]})</span> →{" "}
+                  {a.karyawan?.nama_karyawan ?? "?"}
+                  {a.karyawan && a.karyawan.status_karyawan !== a.status_karyawan && (
+                    <span className="text-zinc-400"> ({STATUS_LABEL[a.karyawan.status_karyawan]})</span>
+                  )}
                 </span>
                 <button
                   onClick={() => unlink(a)}

@@ -13,7 +13,7 @@ class KuitansiNameAliasController extends ApiController
         $this->authUser();
 
         return response()->json([
-            'data' => KuitansiNameAlias::with('karyawan:id,nama_karyawan,nid')
+            'data' => KuitansiNameAlias::with('karyawan:id,nama_karyawan,nid,status_karyawan')
                 ->orderBy('alias_name')
                 ->get(),
         ]);
@@ -34,12 +34,13 @@ class KuitansiNameAliasController extends ApiController
             return response()->json(['message' => 'Nama tidak valid.'], 422);
         }
 
-        $karyawan = Karyawan::where('id', $data['karyawan_id'])
-            ->where('status_karyawan', $data['status_karyawan'])
-            ->first();
+        // status_karyawan is the sheet tab the spelling came from; the target
+        // may be of either status, e.g. a KARYAWAN-tab claim from someone
+        // who has since retired and now only has a pensiunan record.
+        $karyawan = Karyawan::find($data['karyawan_id']);
 
         if (! $karyawan) {
-            return response()->json(['message' => 'Karyawan tidak ditemukan untuk kategori ini.'], 422);
+            return response()->json(['message' => 'Karyawan tidak ditemukan.'], 422);
         }
 
         $alias = KuitansiNameAlias::updateOrCreate(
@@ -54,7 +55,7 @@ class KuitansiNameAliasController extends ApiController
             ]
         );
 
-        return response()->json(['data' => $alias->load('karyawan:id,nama_karyawan,nid')], 201);
+        return response()->json(['data' => $alias->load('karyawan:id,nama_karyawan,nid,status_karyawan')], 201);
     }
 
     public function destroy($id)

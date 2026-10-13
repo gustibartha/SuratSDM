@@ -60,6 +60,18 @@ class KuitansiSyncController extends ApiController
             return $k->status_karyawan . '|' . $k->nid;
         });
 
+        // Someone who has since retired has an archived karyawan_tetap row
+        // and an active pensiunan row with the same NID, while their older
+        // claims still sit in the KARYAWAN tab. NID identifies the person,
+        // so fall back to it regardless of status (only if it's unique).
+        $karyawanByNidAnyStatus = $karyawanAll->filter(function ($k) {
+            return $k->nid;
+        })->groupBy('nid')->filter(function ($group) {
+            return $group->count() === 1;
+        })->map(function ($group) {
+            return $group->first();
+        });
+
         // Names in the sheet are typed by hand ("M KAMAL" vs "M. KAMAL",
         // "ALM.CHORIB", "MURTI TUSLI" vs "MURTITUSLI"), so match on a key
         // that ignores titles, punctuation and spacing. A key shared by two
@@ -136,8 +148,13 @@ class KuitansiSyncController extends ApiController
             $matchKey = self::matchKey($namaKaryawanRaw);
             $nameKey = $statusKaryawan . '|' . $matchKey;
             $nid = trim($row['NID'] ?? '');
+            if (strpos($nid, '#') === 0) {
+                $nid = ''; // spreadsheet formula errors like "#N/A"
+            }
 
-            $karyawan = $nid !== '' ? ($karyawanByNid[$statusKaryawan . '|' . $nid] ?? null) : null;
+            $karyawan = $nid !== ''
+                ? ($karyawanByNid[$statusKaryawan . '|' . $nid] ?? $karyawanByNidAnyStatus[$nid] ?? null)
+                : null;
 
             if (! $karyawan && $matchKey !== '') {
                 $karyawan = $karyawanByName[$nameKey] ?? null;
@@ -222,26 +239,31 @@ class KuitansiSyncController extends ApiController
     }
 
     /**
-     * Ranks the closest karyawan of the same status for each unmatched sheet
-     * name. These are only suggestions: an admin confirms each one, since
-     * near-identical names ("SUMARTO" / "SUHARTO") can be different people.
+     * Ranks the closest karyawan for each unmatched sheet name, across both
+     * statuses (a claim in the KARYAWAN tab may belong to someone who has
+     * since retired). Same-status candidates win ties. These are only
+     * suggestions: an admin confirms each one, since near-identical names
+     * ("SUMARTO" / "SUHARTO") can be different people.
      */
     private function withSuggestions(array $unmatched, $karyawanAll): array
     {
-        $byStatus = $karyawanAll->groupBy('status_karyawan');
-
         foreach ($unmatched as &$item) {
             $needle = self::matchKey($item['name']);
-            $item['suggestions'] = ($byStatus[$item['status_karyawan']] ?? collect())
-                ->map(function ($k) use ($needle) {
+            $status = $item['status_karyawan'];
+            $item['suggestions'] = $karyawanAll
+                ->map(function ($k) use ($needle, $status) {
+                    $distance = levenshtein($needle, self::matchKey((string) $k->nama_karyawan));
+
                     return [
                         'id' => $k->id,
                         'nama_karyawan' => $k->nama_karyawan,
                         'nid' => $k->nid,
-                        'distance' => levenshtein($needle, self::matchKey((string) $k->nama_karyawan)),
+                        'status_karyawan' => $k->status_karyawan,
+                        'distance' => $distance,
+                        'rank' => $distance * 2 + ($k->status_karyawan === $status ? 0 : 1),
                     ];
                 })
-                ->sortBy('distance')
+                ->sortBy('rank')
                 ->take(3)
                 ->values()
                 ->all();
