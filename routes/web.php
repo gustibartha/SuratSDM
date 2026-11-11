@@ -76,6 +76,7 @@ Route::prefix('api')->group(function () {
     Route::get('public/kuitansi-search', 'Api\KuitansiController@publicSearchByName');
     // Dibaca Google Sheet lewat =IMPORTDATA(), dilindungi SHEET_MASTER_KEY.
     Route::get('sheet-master', 'Api\SheetMasterController@show');
+    Route::get('health', 'Api\HealthController@show');
 
     Route::get('csrf-cookie', 'Api\AuthController@csrfCookie');
     Route::post('login', 'Api\AuthController@login');
